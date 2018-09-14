@@ -66,7 +66,7 @@ namespace os
     // ------------------------------------------------------------------------
     // ----- Non-io, global file system functions -----
     class socket*
-    socket (int domain, int type, int protocol);
+    create_socket (int domain, int type, int protocol);
 
     /**
      * @}

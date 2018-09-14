@@ -59,7 +59,7 @@ namespace os
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
     class socket*
-    socket (int domain, int type, int protocol)
+    create_socket (int domain, int type, int protocol)
     {
       errno = 0;
 
@@ -70,7 +70,9 @@ namespace os
         {
           return nullptr;
         }
+#if 0
       sock->alloc_file_descriptor ();
+#endif
       return sock;
     }
 

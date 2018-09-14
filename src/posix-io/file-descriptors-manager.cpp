@@ -27,6 +27,7 @@
 
 #include <cmsis-plus/posix-io/file-descriptors-manager.h>
 #include <cmsis-plus/posix-io/io.h>
+#include <cmsis-plus/posix-io/ioref.h>
 #include <cmsis-plus/posix-io/socket.h>
 
 #include <cmsis-plus/diag/trace.h>
@@ -48,8 +49,7 @@ namespace os
      */
 
     std::size_t file_descriptors_manager::size__;
-
-    io** file_descriptors_manager::descriptors_array__;
+    class ioref<class io>* file_descriptors_manager::descriptors_array__ = nullptr;
 
     /**
      * @endcond
@@ -64,7 +64,7 @@ namespace os
       assert(size > 0);
 
       size__ = size + reserved__; // Add space for standard files.
-      descriptors_array__ = new class io*[size__];
+      descriptors_array__ = new class ioref<>[size__];
 
       for (std::size_t i = 0; i < file_descriptors_manager::size (); ++i)
         {
@@ -81,8 +81,9 @@ namespace os
     }
 
     // ------------------------------------------------------------------------
-
-    io*
+#if 0
+    template <class T = posix::io>
+    ioref<T>
     file_descriptors_manager::io (int fildes)
     {
       // Check if valid descriptor or buffer not yet initialised
@@ -91,9 +92,36 @@ namespace os
         {
           return nullptr;
         }
-      return descriptors_array__[fildes];
+      return (ioref<T>)descriptors_array__[fildes];
+    }
+#endif
+    int
+    file_descriptors_manager::create_descriptor (const ioref<posix::io>& ref, int fd)
+    {
+      if (fd >= 0 && fd < static_cast<int>(size__))
+	{
+	  descriptors_array__[fd] = ref;
+	}
+      else if (fd == -1)
+	{
+	  for (std::size_t i = reserved__; i < size__; ++i)
+	  {
+	    if (descriptors_array__[i] == nullptr)
+	      {
+		descriptors_array__[i] = ref;
+  #if defined(OS_TRACE_POSIX_IO_FILE_DESCRIPTORS_MANAGER)
+		trace::printf ("file_descriptors_manager::%s(%p) fd=%d\n",
+			       __func__, io, i);
+  #endif
+		return static_cast<int> (i);
+	      }
+	  }
+	}
+      errno = ENFILE;
+      return -1;
     }
 
+#if 0
     bool
     file_descriptors_manager::valid (int fildes)
     {
@@ -176,18 +204,18 @@ namespace os
       return 0;
     }
 
-    class socket*
+    ioref<class socket*>
     file_descriptors_manager::socket (int fildes)
     {
       assert((fildes >= 0) && (static_cast<std::size_t> (fildes) < size__));
-      auto* const io = descriptors_array__[fildes];
+      auto const io = descriptors_array__[fildes];
       if (io->get_type () != io::type::socket)
         {
           return nullptr;
         }
       return reinterpret_cast<class socket*> (io);
     }
-
+#endif
     size_t
     file_descriptors_manager::used (void)
     {

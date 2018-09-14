@@ -52,6 +52,8 @@ namespace os
 
     class io;
     class socket;
+    template<class T>
+    class ioref;
 
     // ========================================================================
 
@@ -109,9 +111,20 @@ namespace os
       static bool
       valid (int fildes);
 
-      static class io*
-      io (int fildes);
+      template <class T = posix::io>
+      static class ioref<T>
+      io (int fildes) {
+	if ((fildes < 0) || (static_cast<std::size_t> (fildes) >= size__)
+	    || (descriptors_array__ == nullptr))
+	  {
+	    return nullptr;
+	  }
+	return (ioref<T>)descriptors_array__[fildes];
+      }
 
+      static int
+      create_descriptor (const ioref<posix::io>& ref, int fd = -1);
+#if 0
       static class socket*
       socket (int fildes);
 
@@ -123,7 +136,7 @@ namespace os
 
       static int
       deallocate (file_descriptor_t fildes);
-
+#endif
       static size_t
       used (void);
 
@@ -143,7 +156,7 @@ namespace os
 
       static std::size_t size__;
 
-      static class io** descriptors_array__;
+      static class ioref<class io>* descriptors_array__;
 
       /**
        * @endcond

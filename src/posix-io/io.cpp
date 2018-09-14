@@ -32,6 +32,7 @@
 #include <cmsis-plus/posix-io/file-descriptors-manager.h>
 #include <cmsis-plus/posix-io/file-system.h>
 #include <cmsis-plus/posix-io/io.h>
+#include <cmsis-plus/posix-io/ioref.h>
 
 #include <cmsis-plus/diag/trace.h>
 
@@ -51,13 +52,13 @@ namespace os
   {
     // ------------------------------------------------------------------------
 
-    io*
+    ioref<io>
     open (const char* path, int oflag, ...)
     {
       // Forward to the variadic version of the function.
       std::va_list args;
       va_start(args, oflag);
-      io* const ret = vopen (path, oflag, args);
+      ioref<io> const ret = vopen (path, oflag, args);
       va_end(args);
 
       return ret;
@@ -68,7 +69,7 @@ namespace os
      * `io` object, then call the implementation. If successful, allocate a
      * new POSIX file descriptor, to be used by C functions.
      */
-    io*
+    ioref<io>
     vopen (const char* path, int oflag, std::va_list args)
     {
 #if defined(OS_TRACE_POSIX_IO_IO)
@@ -89,15 +90,16 @@ namespace os
 
       errno = 0;
 
-      os::posix::io* io;
+      ioref<io> io;
       while (true)
         {
           // Check if path is a device.
           io = os::posix::device_registry<device>::identify_device (path);
           if (io != nullptr)
             {
+              ioref<device> iodev = io;
               // If so, use the implementation to open the device.
-              int oret = static_cast<device*> (io)->vopen (path, oflag, args);
+              int oret = iodev->vopen (path, oflag, args);
               if (oret < 0)
                 {
                   // Open failed.
@@ -142,17 +144,24 @@ namespace os
       return io;
     }
 
+    int
+    create_descriptor(const ioref<io>& io, int fd)
+    {
+      return file_descriptors_manager::create_descriptor(io, fd);
+    }
+
     // ========================================================================
 
     io::io (io_impl& impl, type t) :
         impl_ (impl), //
-        type_ (t)
+        type_ (t),
+	refcount_ (0)
     {
 #if defined(OS_TRACE_POSIX_IO_IO)
       trace::printf ("io::%s()=%p\n", __func__, this);
 #endif
 
-      file_descriptor_ = no_file_descriptor;
+     // file_descriptor_ = no_file_descriptor;
     }
 
     io::~io ()
@@ -161,7 +170,7 @@ namespace os
       trace::printf ("io::%s() @%p\n", __func__, this);
 #endif
 
-      file_descriptor_ = no_file_descriptor;
+      //file_descriptor_ = no_file_descriptor;
     }
 
     // ------------------------------------------------------------------------
@@ -185,10 +194,31 @@ namespace os
       int ret = impl ().do_close ();
 
       // Remove this IO from the file descriptors registry.
-      file_descriptors_manager::deallocate (file_descriptor_);
-      file_descriptor_ = no_file_descriptor;
+      //file_descriptors_manager::deallocate (file_descriptor_);
+      //file_descriptor_ = no_file_descriptor;
 
       return ret;
+    }
+
+    void
+    io::release (void) {
+      assert (refcount_ == 0);
+    }
+
+    void
+    io::refDec (void)
+    {
+      assert (refcount_ != 0);
+      refcount_ --;
+      if (refcount_ == 0)
+	{
+	  release();
+	}
+    }
+    void
+    io::refInc (void)
+    {
+      refcount_ ++;
     }
 
     io*
@@ -197,7 +227,7 @@ namespace os
 #if defined(OS_TRACE_POSIX_IO_IO)
       trace::printf ("io::%s() @%p\n", __func__, this);
 #endif
-
+#if 0
       int fd = file_descriptors_manager::allocate (this);
       if (fd < 0)
         {
@@ -206,7 +236,7 @@ namespace os
           clear_file_descriptor ();
           return nullptr;
         }
-
+#endif
 #if defined(OS_TRACE_POSIX_IO_IO)
       trace::printf ("io::%s() @%p fd=%d\n", __func__, this, fd);
 #endif

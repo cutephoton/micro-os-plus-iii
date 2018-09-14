@@ -31,6 +31,7 @@
 #include <cmsis-plus/posix-io/types.h>
 #include <cmsis-plus/posix-io/file-descriptors-manager.h>
 #include <cmsis-plus/posix-io/io.h>
+#include <cmsis-plus/posix-io/ioref.h>
 #include <cmsis-plus/posix-io/char-device.h>
 #include <cmsis-plus/posix-io/tty.h>
 #include <cmsis-plus/posix-io/file.h>
@@ -91,7 +92,7 @@ __posix_open (const char* path, int oflag, ...)
 {
   va_list args;
   va_start(args, oflag);
-  auto* const io = posix::vopen (path, oflag, args);
+  auto const io = posix::vopen (path, oflag, args);
   va_end(args);
 
   if (io == nullptr)
@@ -101,7 +102,7 @@ __posix_open (const char* path, int oflag, ...)
     }
 
   // Return non-negative POSIX file descriptor.
-  return io->file_descriptor ();
+  return posix::create_descriptor(io);
 }
 
 int
@@ -109,7 +110,7 @@ __posix_close (int fildes)
 {
   // The flow is identical for all POSIX functions: identify the C++
   // object and call the corresponding C++ method.
-  auto* const io = posix::file_descriptors_manager::io (fildes);
+  auto const io = posix::file_descriptors_manager::io<> (fildes);
   if (io == nullptr)
     {
       errno = EBADF;
@@ -123,7 +124,7 @@ __posix_close (int fildes)
 ssize_t
 __posix_read (int fildes, void* buf, size_t nbyte)
 {
-  auto* const io = posix::file_descriptors_manager::io (fildes);
+  auto const io = posix::file_descriptors_manager::io<> (fildes);
   if (io == nullptr)
     {
       // STDIN
@@ -140,7 +141,7 @@ __posix_read (int fildes, void* buf, size_t nbyte)
 ssize_t
 __posix_write (int fildes, const void* buf, size_t nbyte)
 {
-  auto* const io = posix::file_descriptors_manager::io (fildes);
+  auto const io = posix::file_descriptors_manager::io<> (fildes);
   if (io == nullptr)
     {
       // STDOUT & STDERR
@@ -157,7 +158,7 @@ __posix_write (int fildes, const void* buf, size_t nbyte)
 ssize_t
 __posix_writev (int fildes, const struct iovec* iov, int iovcnt)
 {
-  auto* const io = posix::file_descriptors_manager::io (fildes);
+  auto const io = posix::file_descriptors_manager::io<> (fildes);
   if (io == nullptr)
     {
       errno = EBADF;
@@ -169,7 +170,7 @@ __posix_writev (int fildes, const struct iovec* iov, int iovcnt)
 int
 __posix_ioctl (int fildes, int request, ...)
 {
-  auto* const io = posix::file_descriptors_manager::io (fildes);
+  auto const io = posix::file_descriptors_manager::io<posix::char_device> (fildes);
   if (io == nullptr)
     {
       errno = EBADF;
@@ -177,15 +178,17 @@ __posix_ioctl (int fildes, int request, ...)
     }
 
   // Works only on STREAMS (CherDevices, in this implementation)
+#if 0
+  // Not
   if ((io->get_type () & posix::io::type::char_device) == 0)
     {
       errno = ENOTTY; // Not a stream.
       return -1;
     }
-
+#endif
   va_list args;
   va_start(args, request);
-  int ret = (static_cast<posix::char_device*> (io))->vioctl (request, args);
+  int ret = io->vioctl (request, args);
   va_end(args);
 
   return ret;
@@ -194,7 +197,7 @@ __posix_ioctl (int fildes, int request, ...)
 off_t
 __posix_lseek (int fildes, off_t offset, int whence)
 {
-  auto* const io = posix::file_descriptors_manager::io (fildes);
+  auto const io = posix::file_descriptors_manager::io<posix::file> (fildes);
   if (io == nullptr)
     {
       errno = EBADF; // Fildes is not an open file descriptor.
@@ -202,13 +205,15 @@ __posix_lseek (int fildes, off_t offset, int whence)
     }
 
   // Works only on files (Does not work on sockets, pipes or FIFOs...)
+#if 0
   if ((io->get_type () & posix::io::type::file) == 0)
     {
       errno = ESPIPE; // Not a file.
       return -1;
     }
+#endif
 
-  return (static_cast<posix::file*> (io))->lseek (offset, whence);
+  return io->lseek (offset, whence);
 }
 
 /**
@@ -220,7 +225,7 @@ __posix_lseek (int fildes, off_t offset, int whence)
 int
 __posix_isatty (int fildes)
 {
-  auto* const io = posix::file_descriptors_manager::io (fildes);
+  auto const io = posix::file_descriptors_manager::io<> (fildes);
   if (io == nullptr)
     {
       if (fildes <= 2)
@@ -236,7 +241,7 @@ __posix_isatty (int fildes)
 int
 __posix_tcdrain (int fildes)
 {
-  auto* const io = posix::file_descriptors_manager::io (fildes);
+  auto const io = posix::file_descriptors_manager::io<posix::tty> (fildes);
   if (io == nullptr)
     {
       errno = EBADF; // Fildes is not an open file descriptor.
@@ -250,13 +255,13 @@ __posix_tcdrain (int fildes)
       return -1;
     }
 
-  return (static_cast<posix::tty*> (io))->tcdrain ();
+  return io->tcdrain ();
 }
 
 int
 __posix_tcgetattr (int fildes, struct termios *termios_p)
 {
-  auto* const io = posix::file_descriptors_manager::io (fildes);
+  auto const io = posix::file_descriptors_manager::io<posix::tty> (fildes);
   if (io == nullptr)
     {
       errno = EBADF; // Fildes is not an open file descriptor.
@@ -264,41 +269,44 @@ __posix_tcgetattr (int fildes, struct termios *termios_p)
     }
 
   // Works only on tty...)
+#if 0
   if ((io->get_type () & posix::io::type::tty) == 0)
     {
       errno = ESPIPE; // Not a tty.
       return -1;
     }
+#endif
 
-  return (static_cast<posix::tty*> (io))->tcgetattr (termios_p);
+  return io->tcgetattr (termios_p);
 }
 
 int
 __posix_tcsetattr (int fildes, int optional_actions,
                    const struct termios *termios_p)
 {
-  auto* const io = posix::file_descriptors_manager::io (fildes);
+  auto const io = posix::file_descriptors_manager::io<posix::tty> (fildes);
   if (io == nullptr)
     {
       errno = EBADF; // Fildes is not an open file descriptor.
       return -1;
     }
 
+#if 0
   // Works only on tty...)
   if ((io->get_type () & posix::io::type::tty) == 0)
     {
       errno = ESPIPE; // Not a tty.
       return -1;
     }
+#endif
 
-  return (static_cast<posix::tty*> (io))->tcsetattr (optional_actions,
-                                                     termios_p);
+  return io->tcsetattr (optional_actions, termios_p);
 }
 
 int
 __posix_tcflush (int fildes, int queue_selector)
 {
-  auto* const io = posix::file_descriptors_manager::io (fildes);
+  auto const io = posix::file_descriptors_manager::io<posix::tty> (fildes);
   if (io == nullptr)
     {
       errno = EBADF; // Fildes is not an open file descriptor.
@@ -312,13 +320,13 @@ __posix_tcflush (int fildes, int queue_selector)
       return -1;
     }
 
-  return (static_cast<posix::tty*> (io))->tcflush (queue_selector);
+  return io->tcflush (queue_selector);
 }
 
 int
 __posix_tcsendbreak (int fildes, int duration)
 {
-  auto* const io = posix::file_descriptors_manager::io (fildes);
+  auto const io = posix::file_descriptors_manager::io<posix::tty> (fildes);
   if (io == nullptr)
     {
       errno = EBADF; // Fildes is not an open file descriptor.
@@ -332,13 +340,13 @@ __posix_tcsendbreak (int fildes, int duration)
       return -1;
     }
 
-  return (static_cast<posix::tty*> (io))->tcsendbreak (duration);
+  return io->tcsendbreak (duration);
 }
 
 int
 __posix_fcntl (int fildes, int cmd, ...)
 {
-  auto* const io = posix::file_descriptors_manager::io (fildes);
+  auto const io = posix::file_descriptors_manager::io<> (fildes);
   if (io == nullptr)
     {
       errno = EBADF;
@@ -356,7 +364,7 @@ __posix_fcntl (int fildes, int cmd, ...)
 int
 __posix_fstat (int fildes, struct stat* buf)
 {
-  auto* const io = posix::file_descriptors_manager::io (fildes);
+  auto const io = posix::file_descriptors_manager::io<> (fildes);
   if (io == nullptr)
     {
       errno = EBADF;
@@ -368,61 +376,61 @@ __posix_fstat (int fildes, struct stat* buf)
 int
 __posix_fstatvfs (int fildes, struct statvfs* buf)
 {
-  auto* const io = posix::file_descriptors_manager::io (fildes);
+  auto const io = posix::file_descriptors_manager::io<posix::file> (fildes);
   if (io == nullptr)
     {
       errno = EBADF;
       return -1;
     }
-
+#if 0
   // Works only on files (Does not work on sockets, pipes or FIFOs...)
   if ((io->get_type () & posix::io::type::file) == 0)
     {
       errno = EINVAL; // Not a file.
       return -1;
     }
-
-  return (static_cast<posix::file*> (io))->fstatvfs (buf);
+#endif
+  return io->fstatvfs (buf);
 }
 
 int
 __posix_ftruncate (int fildes, off_t length)
 {
-  auto* const io = posix::file_descriptors_manager::io (fildes);
+  auto const io = posix::file_descriptors_manager::io<posix::file> (fildes);
   if (io == nullptr)
     {
       errno = EBADF;
       return -1;
     }
-
+#if 0
   // Works only on files (Does not work on sockets, pipes or FIFOs...)
   if ((io->get_type () & posix::io::type::file) == 0)
     {
       errno = EINVAL; // Not a file.
       return -1;
     }
-
-  return (static_cast<posix::file*> (io))->ftruncate (length);
+#endif
+  return io->ftruncate (length);
 }
 
 int
 __posix_fsync (int fildes)
 {
-  auto* const io = posix::file_descriptors_manager::io (fildes);
+  auto const io = posix::file_descriptors_manager::io<posix::file> (fildes);
   if (io == nullptr)
     {
       errno = EBADF;
       return -1;
     }
-
+#if 0
   // Works only on files (Does not work on sockets, pipes or FIFOs...)
   if ((io->get_type () & posix::io::type::file) == 0)
     {
       errno = EINVAL; // Not a file.
       return -1;
     }
-
-  return (static_cast<posix::file*> (io))->fsync ();
+#endif
+  return io->fsync ();
 }
 
 // ----------------------------------------------------------------------------
@@ -560,6 +568,7 @@ __posix_closedir (DIR* dirp)
 int
 __posix_socket (int domain, int type, int protocol)
 {
+#if 0
   auto* const sock = posix::socket (domain, type, protocol);
   if (sock == nullptr)
     {
@@ -567,6 +576,9 @@ __posix_socket (int domain, int type, int protocol)
       return -1;
     }
   return sock->file_descriptor ();
+#else
+  return -1;
+#endif
 }
 
 #if 0
@@ -581,7 +593,7 @@ __posix_socketpair (int domain, int type, int protocol, int socket_vector[2])
 int
 __posix_accept (int socket, struct sockaddr* address, socklen_t* address_len)
 {
-  auto* const io = posix::file_descriptors_manager::socket (socket);
+  auto const io = posix::file_descriptors_manager::io<posix::socket> (socket);
   if (io == nullptr)
     {
       errno = EBADF;
@@ -594,7 +606,7 @@ __posix_accept (int socket, struct sockaddr* address, socklen_t* address_len)
 int
 __posix_bind (int socket, const struct sockaddr* address, socklen_t address_len)
 {
-  auto* const io = posix::file_descriptors_manager::socket (socket);
+  auto const io = posix::file_descriptors_manager::io<posix::socket> (socket);
   if (io == nullptr)
     {
       errno = EBADF;
@@ -607,7 +619,7 @@ int
 __posix_connect (int socket, const struct sockaddr* address,
                  socklen_t address_len)
 {
-  auto* const io = posix::file_descriptors_manager::socket (socket);
+  auto const io = posix::file_descriptors_manager::io<posix::socket> (socket);
   if (io == nullptr)
     {
       errno = EBADF;
@@ -620,7 +632,7 @@ int
 __posix_getpeername (int socket, struct sockaddr* address,
                      socklen_t* address_len)
 {
-  auto* const io = posix::file_descriptors_manager::socket (socket);
+  auto const io = posix::file_descriptors_manager::io<posix::socket> (socket);
   if (io == nullptr)
     {
       errno = EBADF;
@@ -633,7 +645,7 @@ int
 __posix_getsockname (int socket, struct sockaddr* address,
                      socklen_t* address_len)
 {
-  auto* const io = posix::file_descriptors_manager::socket (socket);
+  auto const io = posix::file_descriptors_manager::io<posix::socket> (socket);
   if (io == nullptr)
     {
       errno = EBADF;
@@ -646,7 +658,7 @@ int
 __posix_getsockopt (int socket, int level, int option_name, void* option_value,
                     socklen_t* option_len)
 {
-  auto* const io = posix::file_descriptors_manager::socket (socket);
+  auto const io = posix::file_descriptors_manager::io<posix::socket> (socket);
   if (io == nullptr)
     {
       errno = EBADF;
@@ -658,7 +670,7 @@ __posix_getsockopt (int socket, int level, int option_name, void* option_value,
 int
 __posix_listen (int socket, int backlog)
 {
-  auto* const io = posix::file_descriptors_manager::socket (socket);
+  auto const io = posix::file_descriptors_manager::io<posix::socket> (socket);
   if (io == nullptr)
     {
       errno = EBADF;
@@ -670,7 +682,7 @@ __posix_listen (int socket, int backlog)
 ssize_t
 __posix_recv (int socket, void* buffer, size_t length, int flags)
 {
-  auto* const io = posix::file_descriptors_manager::socket (socket);
+  auto const io = posix::file_descriptors_manager::io<posix::socket> (socket);
   if (io == nullptr)
     {
       errno = EBADF;
@@ -683,7 +695,7 @@ ssize_t
 __posix_recvfrom (int socket, void* buffer, size_t length, int flags,
                   struct sockaddr* address, socklen_t* address_len)
 {
-  auto* const io = posix::file_descriptors_manager::socket (socket);
+  auto const io = posix::file_descriptors_manager::io<posix::socket> (socket);
   if (io == nullptr)
     {
       errno = EBADF;
@@ -695,7 +707,7 @@ __posix_recvfrom (int socket, void* buffer, size_t length, int flags,
 ssize_t
 __posix_recvmsg (int socket, struct msghdr* message, int flags)
 {
-  auto* const io = posix::file_descriptors_manager::socket (socket);
+  auto const io = posix::file_descriptors_manager::io<posix::socket> (socket);
   if (io == nullptr)
     {
       errno = EBADF;
@@ -707,7 +719,7 @@ __posix_recvmsg (int socket, struct msghdr* message, int flags)
 ssize_t
 __posix_send (int socket, const void* buffer, size_t length, int flags)
 {
-  auto* const io = posix::file_descriptors_manager::socket (socket);
+  auto const io = posix::file_descriptors_manager::io<posix::socket> (socket);
   if (io == nullptr)
     {
       errno = EBADF;
@@ -719,7 +731,7 @@ __posix_send (int socket, const void* buffer, size_t length, int flags)
 ssize_t
 __posix_sendmsg (int socket, const struct msghdr* message, int flags)
 {
-  auto* const io = posix::file_descriptors_manager::socket (socket);
+  auto const io = posix::file_descriptors_manager::io<posix::socket> (socket);
   if (io == nullptr)
     {
       errno = EBADF;
@@ -732,7 +744,7 @@ ssize_t
 __posix_sendto (int socket, const void* message, size_t length, int flags,
                 const struct sockaddr* dest_addr, socklen_t dest_len)
 {
-  auto* const io = posix::file_descriptors_manager::socket (socket);
+  auto const io = posix::file_descriptors_manager::io<posix::socket> (socket);
   if (io == nullptr)
     {
       errno = EBADF;
@@ -745,7 +757,7 @@ int
 __posix_setsockopt (int socket, int level, int option_name,
                     const void* option_value, socklen_t option_len)
 {
-  auto* const io = posix::file_descriptors_manager::socket (socket);
+  auto const io = posix::file_descriptors_manager::io<posix::socket> (socket);
   if (io == nullptr)
     {
       errno = EBADF;
@@ -757,7 +769,7 @@ __posix_setsockopt (int socket, int level, int option_name,
 int
 __posix_shutdown (int socket, int how)
 {
-  auto* const io = posix::file_descriptors_manager::socket (socket);
+  auto const io = posix::file_descriptors_manager::io<posix::socket> (socket);
   if (io == nullptr)
     {
       errno = EBADF;
@@ -769,7 +781,7 @@ __posix_shutdown (int socket, int how)
 int
 __posix_sockatmark (int socket)
 {
-  auto* const io = posix::file_descriptors_manager::socket (socket);
+  auto const io = posix::file_descriptors_manager::io<posix::socket> (socket);
   if (io == nullptr)
     {
       errno = EBADF;

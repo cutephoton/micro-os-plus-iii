@@ -61,17 +61,26 @@ namespace os
     class file_system;
     class socket;
 
+    template<class T>
+    class ioref;
+
+    //template<class T = io>
+    //class ioref;
+
     /**
      * @ingroup cmsis-plus-posix-io-func
      * @{
      */
 
     // ------------------------------------------------------------------------
-    io*
+    ioref<io>
     open (const char* path, int oflag, ...);
 
-    io*
+    ioref<io>
     vopen (const char* path, int oflag, std::va_list args);
+
+    int
+    create_descriptor(const ioref<io>& obj, int fd = -1);
 
     /**
      * @}
@@ -92,15 +101,17 @@ namespace os
        */
 
       friend class file_system;
+      template<class T>// = io>
+      friend class ioref;
       friend class file_descriptors_manager;
 
-      friend io*
+      friend ioref<io>
       vopen (const char* path, int oflag, std::va_list args);
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wshadow"
       friend class socket*
-      socket (int domain, int type, int protocol);
+      create_socket (int domain, int type, int protocol);
 #pragma GCC diagnostic pop
 
       /**
@@ -248,6 +259,14 @@ namespace os
       io*
       alloc_file_descriptor (void);
 
+      virtual void
+      release (void);
+
+      void
+      refDec (void);
+
+      void
+      refInc (void);
       /**
        * @}
        */
@@ -274,7 +293,10 @@ namespace os
 
       type_t type_ = type::not_set;
 
-      file_descriptor_t file_descriptor_ = no_file_descriptor;
+      /**
+       * @cond ignore
+       */
+      size_t refcount_;
 
       /**
        * @endcond
@@ -412,19 +434,19 @@ namespace os
     inline void
     io::file_descriptor (file_descriptor_t fildes)
     {
-      file_descriptor_ = fildes;
+      //file_descriptor_ = fildes;
     }
 
     inline void
     io::clear_file_descriptor (void)
     {
-      file_descriptor_ = no_file_descriptor;
+      //file_descriptor_ = no_file_descriptor;
     }
 
     inline file_descriptor_t
     io::file_descriptor (void) const
     {
-      return file_descriptor_;
+      return 0;//file_descriptor_;
     }
 
     inline bool

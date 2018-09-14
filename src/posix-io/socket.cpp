@@ -71,7 +71,9 @@ namespace os
         {
           return nullptr;
         }
+#if 0
       new_socket->alloc_file_descriptor ();
+#endif
       return new_socket;
     }
 

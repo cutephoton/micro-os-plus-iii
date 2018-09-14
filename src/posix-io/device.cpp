@@ -97,13 +97,13 @@ namespace os
               // Open failed.
               return -1;
             }
-
+#if 0
           auto iop = alloc_file_descriptor ();
           if (iop == nullptr)
             {
               return -1;
             }
-
+#endif
         }
       ++(impl ().open_count_);
       ret = file_descriptor ();
