@@ -98,6 +98,9 @@ namespace os
           if (io != nullptr)
             {
               ioref<device> iodev = io;
+              if (iodev == nullptr) {
+        	  return nullptr;
+              }
               // If so, use the implementation to open the device.
               int oret = iodev->vopen (path, oflag, args);
               if (oret < 0)

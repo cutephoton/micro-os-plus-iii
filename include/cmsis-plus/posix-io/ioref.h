@@ -48,6 +48,7 @@ namespace os
   namespace posix
   {
 
+
     template<class T = io>
     class ioref {
       static_assert(std::is_base_of<io, T>::value,"Must be a 'io' object");
@@ -166,7 +167,14 @@ namespace os
 
 	if (nptr != nullptr)
 	  {
-	    nptr->refInc ();
+	    if ((static_cast<posix::iotype_t>(nptr->type_) & traits::io_type<T>::value) != 0)// || std::is_same<T,posix::io>::value)
+	      {
+		nptr->refInc ();
+	      }
+	    else
+	      {
+		nptr = nullptr; // Bad Type!
+	      }
 	  }
 	if (cptr != nullptr)
 	  {

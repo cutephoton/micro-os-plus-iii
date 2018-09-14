@@ -50,6 +50,62 @@ namespace os
 
     constexpr file_descriptor_t no_file_descriptor = -1;
 
+    class io;
+    class file;
+    class socket;
+    class char_device;
+    class block_device;
+    class tty;
+    class device;
+
+    using iotype_t = unsigned int;
+    enum iotype : iotype_t
+    {
+      iotype_unknown = 0,
+      iotype_not_set = 1 << 0,
+      iotype_char_device = 1 << 1,
+      iotype_block_device = 1 << 2,
+      iotype_tty = 1 << 3,
+      iotype_file = 1 << 4,
+      iotype_socket = 1 << 5
+    };
+
+
+    namespace traits {
+      template< typename T >
+      struct io_type {
+	static const iotype_t value = iotype_unknown;
+      };
+      template<>
+      struct io_type<file>{
+        static const iotype_t value = iotype_file;
+      };
+      template<>
+      struct io_type<char_device>{
+        static const iotype_t value = iotype_char_device;
+      };
+      template<>
+      struct io_type<tty>{
+        static const iotype_t value = iotype_tty;
+      };
+      template<>
+      struct io_type<block_device>{
+        static const iotype_t value = iotype_block_device;
+      };
+      template<>
+      struct io_type<socket>{
+        static const iotype_t value = iotype_socket;
+      };
+      template<>
+      struct io_type<io>{
+        static const iotype_t value = ~0;
+      };
+      template<>
+      struct io_type<device>{
+        static const iotype_t value = iotype_block_device|iotype_char_device;
+      };
+    }
+
   } /* namespace posix */
 } /* namespace os */
 
